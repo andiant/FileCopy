@@ -54,6 +54,12 @@ public class FileCopyClient extends Thread {
 	  
 	  // Verbindung zum Server aufbauen
 	  billig pc
+	  sdhsdf
+	  hsdh
+	  sdh
+	  sgh
+	  sfth
+	  sfths
 	  
 	  // erstes Datenpacket senden
 	  
