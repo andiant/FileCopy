@@ -50,7 +50,7 @@ public class FileCopyClient extends Thread {
       // ToDo!!
 	  
 	  // Datei einlesen
-
+		andi laptop
 	  
 	  // Verbindung zum Server aufbauen
 	  
