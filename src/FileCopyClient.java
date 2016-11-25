@@ -51,6 +51,12 @@ public class FileCopyClient extends Thread {
 	  
 	  // Datei einlesen
 		andi laptop
+		dfg
+		dfgj
+		dfg
+		dhdg
+		hdgh
+		
 	  
 	  // Verbindung zum Server aufbauen
 	  billig pc
