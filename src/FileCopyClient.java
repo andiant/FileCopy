@@ -34,8 +34,8 @@ public class FileCopyClient extends Thread {
 
   // ... ToDo
   private DatagramSocket serverSocket;
-  private InetAddress serverAdress;
-  private LinkedList<DatagramPacket> window;
+  private SocketAddress serverAdress;
+  private MyWindow window;
 
 
   // Constructor
@@ -52,34 +52,34 @@ public class FileCopyClient extends Thread {
   public void runFileCopyClient() {
 
       // ToDo!!
-	  
-	  // Datei einlesen
-	  File fileToSend = new File(sourcePath)
-	  MyFileReader fileReader = new FileReader(fileToSend);
-	  
-	  
-	  // Verbindung zum Server aufbauen
-	  serverAdress = new InetSocketAddress(servername, SERVER_PORT);
-	  serverSocket.connect(serverAdress,SERVER_PORT);
-	  
-	  // erstes Datenpacket senden
-	  
-	  
-	  // Weitere datenpackete schicken
-	  byte[] nextBytesToSend;
-	  DatagramPacket = packet;
-	  while((nextBytesToSend = FileReader.nextBytes) != null && nextBytesToSend.length > 0) {
-		  packet = new DatagramPacket(nextBytesToSend, nextBytesToSend.length);
-		  
-		  // prüfen/warten dass das Packet ins Window passt
-		  while (window.size() >= windowSize) {
-			  this.wait(timeoutValue);
-		  }
-		  
-		  window.addLast(packet);
-		  serverSocket.send(packet);
-	  }
-	  
+
+		// Datei einlesen
+		File fileToSend = new File(sourcePath);
+		MyFileReader fileReader = new MyFileReader(fileToSend);
+
+		// Verbindung zum Server aufbauen
+		serverAdress = new InetSocketAddress(servername, SERVER_PORT);
+		try {
+			serverSocket.connect(serverAdress);
+		} catch (SocketException e) {
+			e.printStackTrace();
+		}
+
+		// erstes Datenpacket senden
+
+		// Weitere datenpackete schicken
+		byte[] nextBytesToSend;
+		DatagramPacket packet;
+		while ((nextBytesToSend = fileReader.nextBytes()) != null && nextBytesToSend.length > 0) {
+			packet = new DatagramPacket(nextBytesToSend, nextBytesToSend.length);
+
+			window.addLast(packet);
+			try {
+				serverSocket.send(packet);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
 
   }
 
