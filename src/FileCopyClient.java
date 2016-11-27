@@ -7,6 +7,7 @@
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedList;
 
 public class FileCopyClient extends Thread {
 
@@ -34,6 +35,9 @@ public class FileCopyClient extends Thread {
 
   // ... ToDo
   private final char TRENNREICHEN = ';'; 
+  private DatagramSocket serverSocket;
+  private SocketAddress serverAdress;
+  private MyWindow window;
 
 
   // Constructor
@@ -52,7 +56,7 @@ public class FileCopyClient extends Thread {
       // ToDo!!
 	  
 	  // Datei einlesen
-	  MyFileReader mfr = new MyFileReader(sourcePath);
+	  MyFileReader fileReader = new MyFileReader(sourcePath);
 	  
 	  
 	  // Verbindung zum Server aufbauen
@@ -70,8 +74,20 @@ public class FileCopyClient extends Thread {
 		System.out.println("Could not send first Packet!!!");
 	}
 	  
-	  // Weitere datenpackete schicken
-	  
+
+		// Weitere datenpackete schicken
+		byte[] nextBytesToSend;
+		DatagramPacket packet;
+		while ((nextBytesToSend = fileReader.nextBytes()) != null && nextBytesToSend.length > 0) {
+			packet = new DatagramPacket(nextBytesToSend, nextBytesToSend.length);
+
+			window.addLast(packet);
+			try {
+				serverSocket.send(packet);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
 
   }
 
