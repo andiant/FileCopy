@@ -1,7 +1,7 @@
 
 public class MyFileReader {
 	
-	public MyFileReader() {
+	public MyFileReader(File file) {
 		// TODO Auto-generated constructor stub
 	}
 	

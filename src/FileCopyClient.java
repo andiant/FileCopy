@@ -6,6 +6,7 @@
 
 import java.io.*;
 import java.net.*;
+import java.util.LinkedList;
 
 public class FileCopyClient extends Thread {
 
@@ -32,6 +33,9 @@ public class FileCopyClient extends Thread {
   private long timeoutValue = 100000000L;
 
   // ... ToDo
+  private DatagramSocket serverSocket;
+  private InetAddress serverAdress;
+  private LinkedList<DatagramPacket> window;
 
 
   // Constructor
@@ -50,17 +54,31 @@ public class FileCopyClient extends Thread {
       // ToDo!!
 	  
 	  // Datei einlesen
+	  File fileToSend = new File(sourcePath)
+	  MyFileReader fileReader = new FileReader(fileToSend);
 	  
 	  
 	  // Verbindung zum Server aufbauen
-	  
-	  
+	  serverAdress = new InetSocketAddress(servername, SERVER_PORT);
+	  serverSocket.connect(serverAdress,SERVER_PORT);
 	  
 	  // erstes Datenpacket senden
 	  
 	  
-	  
 	  // Weitere datenpackete schicken
+	  byte[] nextBytesToSend;
+	  DatagramPacket = packet;
+	  while((nextBytesToSend = FileReader.nextBytes) != null && nextBytesToSend.length > 0) {
+		  packet = new DatagramPacket(nextBytesToSend, nextBytesToSend.length);
+		  
+		  // prüfen/warten dass das Packet ins Window passt
+		  while (window.size() >= windowSize) {
+			  this.wait(timeoutValue);
+		  }
+		  
+		  window.addLast(packet);
+		  serverSocket.send(packet);
+	  }
 	  
 
   }
