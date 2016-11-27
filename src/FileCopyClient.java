@@ -6,6 +6,7 @@
 
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 
 public class FileCopyClient extends Thread {
 
@@ -32,6 +33,7 @@ public class FileCopyClient extends Thread {
   private long timeoutValue = 100000000L;
 
   // ... ToDo
+  private final char TRENNREICHEN = ';'; 
 
 
   // Constructor
@@ -45,20 +47,28 @@ public class FileCopyClient extends Thread {
 
   }
 
-  public void runFileCopyClient() {
+  public void runFileCopyClient() throws SocketException, UnknownHostException {
 
       // ToDo!!
 	  
 	  // Datei einlesen
+	  MyFileReader mfr = new MyFileReader(sourcePath);
 	  
 	  
 	  // Verbindung zum Server aufbauen
-	  
+	  DatagramSocket socket = new DatagramSocket();
+	  InetAddress IPAddress = InetAddress.getByName(servername);
 	  
 	  
 	  // erstes Datenpacket senden
-	  
-	  
+	  FCpacket firstFCPacket = makeControlPacket();
+      DatagramPacket sendPacket = new DatagramPacket(firstFCPacket.getData(), firstFCPacket.getLen(), IPAddress, SERVER_PORT);
+
+      try {
+		socket.send(sendPacket);
+	} catch (IOException e) {
+		System.out.println("Could not send first Packet!!!");
+	}
 	  
 	  // Weitere datenpackete schicken
 	  
@@ -126,7 +136,7 @@ public class FileCopyClient extends Thread {
           .currentThread().getName(), out);
     }
   }
-
+  
   public static void main(String argv[]) throws Exception {
     FileCopyClient myClient = new FileCopyClient(argv[0], argv[1], argv[2],
         argv[3], argv[4]);
