@@ -92,28 +92,26 @@ public class FileCopyClient extends Thread {
 		FCpacket lastFcPacket = firstFCPacket;
 		FCpacket newFcPacket;
 		long currentWindowSize;
-		long seqNum;
+		long newSeqNum;
 		while ((nextBytesFromFile = fileReader.nextBytes()) != null && nextBytesFromFile.length > 0) {
-			seqNum = lastFcPacket.getSeqNum() + lastFcPacket.getLen();
-			newFcPacket = new FCpacket(seqNum, nextBytesFromFile, nextBytesFromFile.length);
+			newSeqNum = lastFcPacket.getSeqNum() + lastFcPacket.getLen();
+			newFcPacket = new FCpacket(newSeqNum, nextBytesFromFile, nextBytesFromFile.length);
 
 			// Prüfen/Warten, dass das neue Packet ins Window passt
 			synchronized (window) {
 				currentWindowSize = window.getLast().getSeqNum() - window.getFirst().getSeqNum();
-			}
-			while (currentWindowSize >= windowSize) {
-				try {
-					this.wait();
-				} catch (InterruptedException e) {
-					e.printStackTrace();
+				while (currentWindowSize >= windowSize) {
+					try {
+						this.wait();
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+					synchronized (window) {
+						currentWindowSize = window.getLast().getSeqNum() - window.getFirst().getSeqNum();
+					}
 				}
-				synchronized (window) {
-					currentWindowSize = window.getLast().getSeqNum() - window.getFirst().getSeqNum();
-				}
-			}
 
-			// Neues Packet senden
-			synchronized (window) {
+				// Neues Packet senden
 				window.add(newFcPacket);
 			}
 			nextBytesToSend = newFcPacket.getSeqNumBytesAndData();
@@ -129,9 +127,9 @@ public class FileCopyClient extends Thread {
 	}
 
 	private class AckThread extends Thread {
-		
+
 		private byte[] receiveData;
-		
+
 		public AckThread() {
 			receiveData = new byte[UDP_PACKET_SIZE];
 		}
@@ -144,7 +142,7 @@ public class FileCopyClient extends Thread {
 				while (serverSocket.isConnected()) {
 					udpReceivePacket = new DatagramPacket(receiveData, UDP_PACKET_SIZE);
 					serverSocket.receive(udpReceivePacket);
-					
+
 					// TODO
 
 				}
@@ -180,16 +178,16 @@ public class FileCopyClient extends Thread {
 	 * Implementation specific task performed at timeout
 	 */
 	public void timeoutTask(long seqNum) {
-		//get FCPacket from window
+		// get FCPacket from window
 		FCpacket packetToSend = null;
-		for(int i = 0; i < window.size(); i++){
-			if(window.get(i).getSeqNum() == seqNum){
+		for (int i = 0; i < window.size(); i++) {
+			if (window.get(i).getSeqNum() == seqNum) {
 				packetToSend = window.get(i);
 				break;
 			}
 		}
-		
-		if(packetToSend != null){
+
+		if (packetToSend != null) {
 			try {
 				serverSocket.send(new DatagramPacket(packetToSend.getData(), packetToSend.getLen()));
 			} catch (IOException e) {
