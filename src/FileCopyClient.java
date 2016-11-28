@@ -182,10 +182,12 @@ public class FileCopyClient extends Thread {
 	public void timeoutTask(long seqNum) {
 		//get FCPacket from window
 		FCpacket packetToSend = null;
-		for(int i = 0; i < window.size(); i++){
-			if(window.get(i).getSeqNum() == seqNum){
-				packetToSend = window.get(i);
-				break;
+		synchronized (this) {
+			for(int i = 0; i < window.size(); i++){
+				if(window.get(i).getSeqNum() == seqNum){
+					packetToSend = window.get(i);
+					break;
+				}
 			}
 		}
 		
