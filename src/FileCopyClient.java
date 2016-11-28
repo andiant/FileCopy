@@ -66,18 +66,22 @@ public class FileCopyClient extends Thread {
 		MyFileReader fileReader = new MyFileReader(sourcePath);
 
 		// Verbindung zum Server aufbauen
-		DatagramSocket socket = new DatagramSocket();
-		InetAddress ipAddress = InetAddress.getByName(servername);
+		try {
+			serverSocket = new DatagramSocket(SERVER_PORT, InetAddress.getByName(servername));
+		} catch (SocketException e1) {
+			e1.printStackTrace();
+		} catch (UnknownHostException e) {
+			e.printStackTrace();
+		}
 		ackThread = new AckThread();
 		ackThread.start();
 
 		// erstes Datenpacket senden
 		FCpacket firstFCPacket = makeControlPacket();
-		DatagramPacket sendPacket = new DatagramPacket(firstFCPacket.getData(), firstFCPacket.getLen(), ipAddress,
-				SERVER_PORT);
+		DatagramPacket sendPacket = new DatagramPacket(firstFCPacket.getData(), firstFCPacket.getLen());
 
 		try {
-			socket.send(sendPacket);
+			serverSocket.send(sendPacket);
 		} catch (IOException e) {
 			System.out.println("Could not send first Packet!!!");
 		}
@@ -176,7 +180,23 @@ public class FileCopyClient extends Thread {
 	 * Implementation specific task performed at timeout
 	 */
 	public void timeoutTask(long seqNum) {
-		// ToDo
+		//get FCPacket from window
+		FCpacket packetToSend = null;
+		for(int i = 0; i < window.size(); i++){
+			if(window.get(i).getSeqNum() == seqNum){
+				packetToSend = window.get(i);
+				break;
+			}
+		}
+		
+		if(packetToSend != null){
+			try {
+				serverSocket.send(new DatagramPacket(packetToSend.getData(), packetToSend.getLen()));
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+		startTimer(packetToSend);
 	}
 
 	/**
