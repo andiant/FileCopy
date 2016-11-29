@@ -39,10 +39,10 @@ public class FileCopyClient extends Thread {
 	// current default timeout in nanoseconds
 	private long timeoutValue = 100000000L;
 
-	// ... ToDo
+	// TODO
 	private final char TRENNREICHEN = ';';
 	private DatagramSocket serverSocket;
-	private SocketAddress serverAdress;
+	private InetAddress serverAdress;
 	private LinkedList<FCpacket> window;
 	private AckThread ackThread;
 
@@ -67,7 +67,8 @@ public class FileCopyClient extends Thread {
 
 		// Verbindung zum Server aufbauen
 		try {
-			serverSocket = new DatagramSocket(SERVER_PORT, InetAddress.getByName(servername));
+			serverAdress = InetAddress.getByName(servername);
+			serverSocket = new DatagramSocket();
 		} catch (SocketException e1) {
 			e1.printStackTrace();
 		} catch (UnknownHostException e) {
@@ -78,36 +79,31 @@ public class FileCopyClient extends Thread {
 
 		// erstes Datenpacket senden
 		FCpacket firstFCPacket = makeControlPacket();
-		DatagramPacket sendPacket = new DatagramPacket(firstFCPacket.getData(), firstFCPacket.getLen());
+		DatagramPacket sendPacket = new DatagramPacket(firstFCPacket.getData(), firstFCPacket.getLen(),serverAdress,SERVER_PORT);
 
 		try {
+			window.add(firstFCPacket);
 			serverSocket.send(sendPacket);
 		} catch (IOException e) {
 			System.out.println("Could not send first Packet!!!");
 		}
+		startTimer(firstFCPacket);
 
 		// Weitere Datenpackete schicken
 		byte[] nextBytesFromFile;
 		byte[] nextBytesToSend;
-		FCpacket lastFcPacket = firstFCPacket;
 		FCpacket newFcPacket;
-		long currentWindowSize;
-		long newSeqNum;
+		long nextSeqNum = firstFCPacket.getSeqNum() + firstFCPacket.getLen() + 1;
 		while ((nextBytesFromFile = fileReader.nextBytes()) != null && nextBytesFromFile.length > 0) {
-			newSeqNum = lastFcPacket.getSeqNum() + lastFcPacket.getLen();
-			newFcPacket = new FCpacket(newSeqNum, nextBytesFromFile, nextBytesFromFile.length);
+			newFcPacket = new FCpacket(nextSeqNum, nextBytesFromFile, nextBytesFromFile.length);
 
 			// Prüfen/Warten, dass das neue Packet ins Window passt
 			synchronized (window) {
-				currentWindowSize = window.getLast().getSeqNum() - window.getFirst().getSeqNum();
-				while (currentWindowSize >= windowSize) {
+				while (nextSeqNum - window.getFirst().getSeqNum() >= windowSize) {
 					try {
-						this.wait();
+						window.wait();
 					} catch (InterruptedException e) {
 						e.printStackTrace();
-					}
-					synchronized (window) {
-						currentWindowSize = window.getLast().getSeqNum() - window.getFirst().getSeqNum();
 					}
 				}
 
@@ -116,12 +112,12 @@ public class FileCopyClient extends Thread {
 			}
 			nextBytesToSend = newFcPacket.getSeqNumBytesAndData();
 			try {
-				serverSocket.send(new DatagramPacket(nextBytesToSend, nextBytesToSend.length));
+				serverSocket.send(new DatagramPacket(nextBytesToSend, nextBytesToSend.length,serverAdress,SERVER_PORT));
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
 			startTimer(newFcPacket);
-			lastFcPacket = newFcPacket;
+			nextSeqNum = newFcPacket.getSeqNum() + newFcPacket.getLen() + 1;
 		}
 
 	}
@@ -142,8 +138,25 @@ public class FileCopyClient extends Thread {
 				while (serverSocket.isConnected()) {
 					udpReceivePacket = new DatagramPacket(receiveData, UDP_PACKET_SIZE);
 					serverSocket.receive(udpReceivePacket);
+					testOut("ack received");
 
-					// TODO
+					synchronized (window) {
+						// fcPacket zum vergleich erstellen
+						fcPacket = new FCpacket(udpReceivePacket.getData(), udpReceivePacket.getLength());
+						// fcPacket umwandeln in das echte Datenpacket
+						fcPacket = window.get(window.indexOf(fcPacket));
+						// Packet bestätigen und Packet-Timer stoppen
+						fcPacket.setValidACK(true);
+						cancelTimer(fcPacket);
+						if (fcPacket.equals(window.getFirst())) {
+							while(fcPacket.isValidACK()) {
+								window.removeFirst();
+								fcPacket = window.getFirst();
+							}
+						}
+						// Mainthread benachrichtigen, falls der wegen vollem window wartet
+						window.notifyAll();
+					}
 
 				}
 
@@ -193,7 +206,7 @@ public class FileCopyClient extends Thread {
 
 		if (packetToSend != null) {
 			try {
-				serverSocket.send(new DatagramPacket(packetToSend.getData(), packetToSend.getLen()));
+				serverSocket.send(new DatagramPacket(packetToSend.getData(), packetToSend.getLen(),serverAdress,SERVER_PORT));
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
