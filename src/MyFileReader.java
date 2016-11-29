@@ -6,7 +6,7 @@ import java.io.IOException;
 
 public class MyFileReader {
 	
-	private final int BYTE_DATA_LENGTH = 3;
+	private final int BYTE_DATA_LENGTH = 1000;
 	private FileInputStream fis = null;
 	private BufferedInputStream bis = null;
 	private File file;

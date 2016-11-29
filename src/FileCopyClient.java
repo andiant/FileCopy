@@ -45,6 +45,7 @@ public class FileCopyClient extends Thread {
 	private InetAddress serverAdress;
 	private LinkedList<FCpacket> window;
 	private AckThread ackThread;
+	private boolean done;
 
 	// Constructor
 	public FileCopyClient(String serverArg, String sourcePathArg, String destPathArg, String windowSizeArg,
@@ -69,17 +70,18 @@ public class FileCopyClient extends Thread {
 		try {
 			serverAdress = InetAddress.getByName(servername);
 			serverSocket = new DatagramSocket();
-		} catch (SocketException e1) {
-			e1.printStackTrace();
-		} catch (UnknownHostException e) {
+		} catch (Exception e) {
 			e.printStackTrace();
+			System.out.println("ENDE wegen Fehler");
+			System.exit(0);
 		}
+		done = false;
 		ackThread = new AckThread();
 		ackThread.start();
 
 		// erstes Datenpacket senden
 		FCpacket firstFCPacket = makeControlPacket();
-		DatagramPacket sendPacket = new DatagramPacket(firstFCPacket.getData(), firstFCPacket.getLen(),serverAdress,SERVER_PORT);
+		DatagramPacket sendPacket = new DatagramPacket(firstFCPacket.getSeqNumBytesAndData(), firstFCPacket.getLen() + 8,serverAdress,SERVER_PORT);
 
 		try {
 			window.add(firstFCPacket);
@@ -93,14 +95,15 @@ public class FileCopyClient extends Thread {
 		byte[] nextBytesFromFile;
 		byte[] nextBytesToSend;
 		FCpacket newFcPacket;
-		long nextSeqNum = firstFCPacket.getSeqNum() + firstFCPacket.getLen() + 1;
+		long nextSeqNum = firstFCPacket.getSeqNum() + 1;
 		while ((nextBytesFromFile = fileReader.nextBytes()) != null && nextBytesFromFile.length > 0) {
 			newFcPacket = new FCpacket(nextSeqNum, nextBytesFromFile, nextBytesFromFile.length);
 
 			// Prüfen/Warten, dass das neue Packet ins Window passt
 			synchronized (window) {
-				while (nextSeqNum - window.getFirst().getSeqNum() >= windowSize) {
+				while (window.size() >= windowSize) {
 					try {
+						System.out.println("WAIT");
 						window.wait();
 					} catch (InterruptedException e) {
 						e.printStackTrace();
@@ -109,17 +112,18 @@ public class FileCopyClient extends Thread {
 
 				// Neues Packet senden
 				window.add(newFcPacket);
+				nextBytesToSend = newFcPacket.getSeqNumBytesAndData();
+				try {
+					serverSocket.send(
+							new DatagramPacket(nextBytesToSend, nextBytesToSend.length, serverAdress, SERVER_PORT));
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+				startTimer(newFcPacket);
+				nextSeqNum++;
 			}
-			nextBytesToSend = newFcPacket.getSeqNumBytesAndData();
-			try {
-				serverSocket.send(new DatagramPacket(nextBytesToSend, nextBytesToSend.length,serverAdress,SERVER_PORT));
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-			startTimer(newFcPacket);
-			nextSeqNum = newFcPacket.getSeqNum() + newFcPacket.getLen() + 1;
 		}
-
+		done = true;
 	}
 
 	private class AckThread extends Thread {
@@ -135,10 +139,9 @@ public class FileCopyClient extends Thread {
 			try {
 				DatagramPacket udpReceivePacket;
 				FCpacket fcPacket;
-				while (serverSocket.isConnected()) {
+				while (!done || !window.isEmpty()) {
 					udpReceivePacket = new DatagramPacket(receiveData, UDP_PACKET_SIZE);
 					serverSocket.receive(udpReceivePacket);
-					testOut("ack received");
 
 					synchronized (window) {
 						// fcPacket zum vergleich erstellen
@@ -149,18 +152,27 @@ public class FileCopyClient extends Thread {
 						fcPacket.setValidACK(true);
 						cancelTimer(fcPacket);
 						if (fcPacket.equals(window.getFirst())) {
-							while(fcPacket.isValidACK()) {
+							while(fcPacket != null && fcPacket.isValidACK()) {
+								for(FCpacket p : window){
+									System.out.println(p);
+								}
 								window.removeFirst();
-								fcPacket = window.getFirst();
+								System.out.println("REMOVED: "+fcPacket);
+								if (!window.isEmpty()) {
+									fcPacket = window.getFirst();
+								} else {
+									fcPacket = null;
+								}
 							}
+							// Mainthread benachrichtigen, falls der wegen vollem window wartet
+							System.out.println("NOTIFYALL");
+							window.notifyAll();
 						}
-						// Mainthread benachrichtigen, falls der wegen vollem window wartet
-						window.notifyAll();
 					}
 
 				}
-
 			} catch (Exception e) {
+				e.printStackTrace();
 				serverSocket.close();
 			}
 		}
@@ -206,7 +218,7 @@ public class FileCopyClient extends Thread {
 
 		if (packetToSend != null) {
 			try {
-				serverSocket.send(new DatagramPacket(packetToSend.getData(), packetToSend.getLen(),serverAdress,SERVER_PORT));
+				serverSocket.send(new DatagramPacket(packetToSend.getSeqNumBytesAndData(), packetToSend.getLen() + 8,serverAdress,SERVER_PORT));
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
