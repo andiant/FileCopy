@@ -70,6 +70,9 @@ public class FileCopyClient extends Thread {
 		try {
 			serverAdress = InetAddress.getByName(servername);
 			serverSocket = new DatagramSocket();
+		} catch(UnknownHostException e) {
+			System.out.println(servername + " ist nicht erreichbar");
+			System.exit(0);
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.out.println("ENDE wegen Fehler");
@@ -88,6 +91,8 @@ public class FileCopyClient extends Thread {
 			serverSocket.send(sendPacket);
 		} catch (IOException e) {
 			System.out.println("Could not send first Packet!!!");
+			ackThread.interrupt();
+			System.exit(0);
 		}
 		startTimer(firstFCPacket);
 
@@ -103,10 +108,10 @@ public class FileCopyClient extends Thread {
 			synchronized (window) {
 				while (window.size() >= windowSize) {
 					try {
-						System.out.println("WAIT");
+//						System.out.println("WAIT");
 						window.wait();
 					} catch (InterruptedException e) {
-						e.printStackTrace();
+						testOut("wait interrupted");
 					}
 				}
 
