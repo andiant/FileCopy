@@ -10,8 +10,6 @@ import java.io.UnsupportedEncodingException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.SocketAddress;
-import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.LinkedList;
 
@@ -61,8 +59,6 @@ public class FileCopyClient extends Thread {
 
 	public void runFileCopyClient() {
 
-		// ToDo!!
-
 		// Datei einlesen
 		MyFileReader fileReader = new MyFileReader(sourcePath);
 
@@ -94,6 +90,7 @@ public class FileCopyClient extends Thread {
 			ackThread.interrupt();
 			System.exit(0);
 		}
+		firstFCPacket.setTimestamp(System.nanoTime());
 		startTimer(firstFCPacket);
 
 		// Weitere Datenpackete schicken
@@ -108,7 +105,6 @@ public class FileCopyClient extends Thread {
 			synchronized (window) {
 				while (window.size() >= windowSize) {
 					try {
-//						System.out.println("WAIT");
 						window.wait();
 					} catch (InterruptedException e) {
 						testOut("wait interrupted");
@@ -124,6 +120,7 @@ public class FileCopyClient extends Thread {
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
+				newFcPacket.setTimestamp(System.nanoTime());
 				startTimer(newFcPacket);
 				nextSeqNum++;
 			}
@@ -147,6 +144,7 @@ public class FileCopyClient extends Thread {
 				while (!done || !window.isEmpty()) {
 					udpReceivePacket = new DatagramPacket(receiveData, UDP_PACKET_SIZE);
 					serverSocket.receive(udpReceivePacket);
+					long rtt = System.nanoTime();/*receive Time*/
 
 					synchronized (window) {
 						// fcPacket zum vergleich erstellen
@@ -156,13 +154,12 @@ public class FileCopyClient extends Thread {
 						// Packet bestätigen und Packet-Timer stoppen
 						fcPacket.setValidACK(true);
 						cancelTimer(fcPacket);
+						rtt = rtt - fcPacket.getTimestamp();
+						computeTimeoutValue(rtt);
+						// Window verschieben
 						if (fcPacket.equals(window.getFirst())) {
 							while(fcPacket != null && fcPacket.isValidACK()) {
-								for(FCpacket p : window){
-									System.out.println(p);
-								}
 								window.removeFirst();
-								System.out.println("REMOVED: "+fcPacket);
 								if (!window.isEmpty()) {
 									fcPacket = window.getFirst();
 								} else {
@@ -170,7 +167,6 @@ public class FileCopyClient extends Thread {
 								}
 							}
 							// Mainthread benachrichtigen, falls der wegen vollem window wartet
-							System.out.println("NOTIFYALL");
 							window.notifyAll();
 						}
 					}
@@ -197,7 +193,7 @@ public class FileCopyClient extends Thread {
 
 	public void cancelTimer(FCpacket packet) {
 		/* Cancel timer for the given FCpacket */
-		testOut("Cancel Timer for packet" + packet.getSeqNum());
+//		testOut("Cancel Timer for packet" + packet.getSeqNum());
 
 		if (packet.getTimer() != null) {
 			packet.getTimer().interrupt();
@@ -228,6 +224,7 @@ public class FileCopyClient extends Thread {
 				e.printStackTrace();
 			}
 		}
+		timeoutValue = timeoutValue * 2;
 		startTimer(packetToSend);
 	}
 
@@ -235,9 +232,23 @@ public class FileCopyClient extends Thread {
 	 *
 	 * Computes the current timeout value (in nanoseconds)
 	 */
+	private long jitter = -1;
+	private long expRTT;
+	private double x = 0.25;
+	private double y = x/2;;
 	public void computeTimeoutValue(long sampleRTT) {
-
-		// ToDo
+//		(2.3) When a subsequent RTT measurement R' is made, a host MUST set
+//        RTTVAR <- (1 - beta) * RTTVAR + beta * |SRTT - R'|
+//        SRTT <- (1 - alpha) * SRTT + alpha * R'
+		
+		if (jitter < 0) {
+			jitter = sampleRTT / 2;
+			expRTT = sampleRTT;
+		} else {
+			jitter = (long) ((1.0 - x) * jitter + x * Math.abs(sampleRTT - expRTT));
+			expRTT = (long) ((1.0 - y) * expRTT + y * sampleRTT);
+			timeoutValue = expRTT + 4 * jitter;
+		}
 	}
 
 	/**
