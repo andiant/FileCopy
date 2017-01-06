@@ -38,16 +38,29 @@ public class FileCopyClient extends Thread {
 	private long timeoutValue = 100000000L;
 
 	// TODO
-	private final char TRENNREICHEN = ';';
 	private DatagramSocket serverSocket;
 	private InetAddress serverAdress;
 	private LinkedList<FCpacket> window;
 	private AckThread ackThread;
 	private boolean done;
+	
+	// Programmauswertung
+	private long gesamtUEbertragungszeit; // a) Gesamtübertragungszeit für die gerade übertragene Datei
+	private int timerAblaeufe; // b) Anzahl an Timerabläufen und wiederholten Übertragungen
+	private int wiederholteSendung;
+	private int empfangeneBestaetigungen; // c) Anzahl an empfangenen Bestätigungen
+	private double rttMittelwert; // d) der ermittelte Mittelwert für die RTT aller ACKs
 
 	// Constructor
 	public FileCopyClient(String serverArg, String sourcePathArg, String destPathArg, String windowSizeArg,
 			String errorRateArg) {
+		
+		//Programmauswertungs-Variablen
+		timerAblaeufe = 0;
+		wiederholteSendung = 0;
+		empfangeneBestaetigungen = 0;
+		rttMittelwert = 0.0;
+		
 		servername = serverArg;
 		sourcePath = sourcePathArg;
 		destPath = destPathArg;
@@ -58,7 +71,12 @@ public class FileCopyClient extends Thread {
 	}
 
 	public void runFileCopyClient() {
-
+		System.out.println("- - - - - - - - - - - - - - - - - - - - - - - -");
+		System.out.println("Window-Size: " + windowSize + " \tFehler-Rate: " + serverErrorRate);
+		System.out.println("");
+		
+		gesamtUEbertragungszeit = System.currentTimeMillis();
+		
 		// Datei einlesen
 		MyFileReader fileReader = new MyFileReader(sourcePath);
 
@@ -126,6 +144,18 @@ public class FileCopyClient extends Thread {
 			}
 		}
 		done = true;
+		try {
+			ackThread.join();
+		} catch (InterruptedException e) {
+		}
+		gesamtUEbertragungszeit = System.currentTimeMillis() - gesamtUEbertragungszeit;
+		
+		System.out.println("GesamtübertragungsZeit:\t" + gesamtUEbertragungszeit + " ms");
+		System.out.println("Timer-Ausläufe:\t\t" + timerAblaeufe);
+		System.out.println("Empfangsbestätigungen:\t" + empfangeneBestaetigungen);
+		rttMittelwert = rttMittelwert / empfangeneBestaetigungen;
+		System.out.println("RTT-Mittelwert:\t\t" + rttMittelwert);
+		System.out.println("- - - - - - - - - - - - - - - - - - - - - - - -");
 	}
 
 	private class AckThread extends Thread {
@@ -150,25 +180,31 @@ public class FileCopyClient extends Thread {
 						// fcPacket zum vergleich erstellen
 						fcPacket = new FCpacket(udpReceivePacket.getData(), udpReceivePacket.getLength());
 						// fcPacket umwandeln in das echte Datenpacket
-						fcPacket = window.get(window.indexOf(fcPacket));
-						// Packet bestätigen und Packet-Timer stoppen
-						fcPacket.setValidACK(true);
-						cancelTimer(fcPacket);
-						rtt = rtt - fcPacket.getTimestamp();
-						computeTimeoutValue(rtt);
-						// Window verschieben
-						if (fcPacket.equals(window.getFirst())) {
-							while(fcPacket != null && fcPacket.isValidACK()) {
-								window.removeFirst();
-								if (!window.isEmpty()) {
-									fcPacket = window.getFirst();
-								} else {
-									fcPacket = null;
+						int fcPacketIndex = window.indexOf(fcPacket);
+						if (fcPacketIndex != -1) {
+							fcPacket = window.get(fcPacketIndex);
+							// Packet bestätigen und Packet-Timer stoppen
+							fcPacket.setValidACK(true);
+							empfangeneBestaetigungen++;
+							cancelTimer(fcPacket);
+							rtt = rtt - fcPacket.getTimestamp();
+							rttMittelwert += rtt;
+							computeTimeoutValue(rtt);
+							// Window verschieben
+							if (fcPacket.equals(window.getFirst())) {
+								while (fcPacket != null && fcPacket.isValidACK()) {
+									window.removeFirst();
+									if (!window.isEmpty()) {
+										fcPacket = window.getFirst();
+									} else {
+										fcPacket = null;
+									}
 								}
-							}
-							// Mainthread benachrichtigen, falls der wegen vollem window wartet
-							window.notifyAll();
+								// Mainthread benachrichtigen, falls der wegen vollem window
+								// wartet
+								window.notifyAll();
 						}
+					}
 					}
 
 				}
@@ -208,6 +244,7 @@ public class FileCopyClient extends Thread {
 		FCpacket packetToSend = null;
 
 		synchronized (window) {
+			timerAblaeufe++;
 			for(int i = 0; i < window.size(); i++){
 				if(window.get(i).getSeqNum() == seqNum){
 					packetToSend = window.get(i);
@@ -219,6 +256,7 @@ public class FileCopyClient extends Thread {
 
 		if (packetToSend != null) {
 			try {
+				wiederholteSendung = wiederholteSendung + 1;
 				serverSocket.send(new DatagramPacket(packetToSend.getSeqNumBytesAndData(), packetToSend.getLen() + 8,serverAdress,SERVER_PORT));
 			} catch (IOException e) {
 				e.printStackTrace();
