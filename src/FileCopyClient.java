@@ -35,7 +35,7 @@ public class FileCopyClient extends Thread {
 
 	// -------- Variables
 	// current default timeout in nanoseconds
-	private long timeoutValue = 100000000L;
+	private long timeoutValue = 200000000L;
 
 	// TODO
 	private DatagramSocket serverSocket;
@@ -258,12 +258,12 @@ public class FileCopyClient extends Thread {
 			try {
 				wiederholteSendung = wiederholteSendung + 1;
 				serverSocket.send(new DatagramPacket(packetToSend.getSeqNumBytesAndData(), packetToSend.getLen() + 8,serverAdress,SERVER_PORT));
+				timeoutValue = timeoutValue * 2;
+				startTimer(packetToSend);
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
 		}
-		timeoutValue = timeoutValue * 2;
-		startTimer(packetToSend);
 	}
 
 	/**
