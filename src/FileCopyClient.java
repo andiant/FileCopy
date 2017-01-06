@@ -35,7 +35,7 @@ public class FileCopyClient extends Thread {
 
 	// -------- Variables
 	// current default timeout in nanoseconds
-	private long timeoutValue = 200000000L;
+	private long timeoutValue = 100000000L;
 
 	// TODO
 	private DatagramSocket serverSocket;
