@@ -101,7 +101,9 @@ public class FileCopyServer {
             if (seqNum == 0) {
               if (setParameters(fcReceivePacket)) {
                 // open destination file
-                outToFile = new FileOutputStream(destPath);
+            	  if(outToFile == null){
+            		  outToFile = new FileOutputStream(destPath);
+            	  }
               } else {
                 // Wrong parameter packet --> End!
                 break;
